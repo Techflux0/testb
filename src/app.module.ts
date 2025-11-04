@@ -24,19 +24,26 @@ import { User } from './users/user.entity';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         type: 'mongodb',
-        url: configService.get('DATABASE_URL'),
+        url: configService.get<string>('DATABASE_URL'), // Atlas URI
+        database: configService.get<string>('MONGO_DB_NAME'),
+        ssl: true,
+        authSource: 'admin',
         entities: [User],
-        synchronize: true,
-        useUnifiedTopology: true,
+        synchronize: true, // only for dev
+        logging: true,
       }),
       inject: [ConfigService],
     }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.get('JWT_SECRET'),
-        signOptions: { expiresIn: configService.get('JWT_EXPIRES_IN') },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const rawExpiresIn = configService.get<string>('JWT_EXPIRES_IN');
+        const expiresIn = rawExpiresIn && !Number.isNaN(Number(rawExpiresIn)) ? Number(rawExpiresIn) : rawExpiresIn;
+        return {
+          secret: configService.get<string>('JWT_SECRET'),
+          signOptions: { expiresIn: expiresIn as any },
+        };
+      },
       inject: [ConfigService],
     }),
     MailerModule.forRootAsync({
@@ -44,7 +51,7 @@ import { User } from './users/user.entity';
       useFactory: (configService: ConfigService) => ({
         transport: {
           host: configService.get('MAIL_HOST'),
-          port: configService.get('MAIL_PORT'),
+          port: Number(configService.get('MAIL_PORT')),
           secure: false,
           auth: {
             user: configService.get('MAIL_USER'),
@@ -57,9 +64,7 @@ import { User } from './users/user.entity';
         template: {
           dir: join(__dirname, '..', 'src/mail/templates'),
           adapter: new HandlebarsAdapter(),
-          options: {
-            strict: true,
-          },
+          options: { strict: true },
         },
       }),
       inject: [ConfigService],
